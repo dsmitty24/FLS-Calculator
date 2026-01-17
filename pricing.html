@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FLS Fleet Pricing Estimator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    .primary { background: #111; color: #fff; }
+    .muted { background: #eee; }
+    .big { font-size: 22px; font-weight: 800; }
+    .note { color: #555; font-size: 14px; line-height: 1.4; }
+    .pill { display:inline-block; padding:4px 10px; border:1px solid #ddd; border-radius:999px; font-size:12px; color:#444; }
+    hr { border:none; border-top:1px solid #eee; margin:14px 0; }
+    @media (max-width: 800px){ .grid, .grid3 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Fleet Pricing Estimator</h1>
+    <p class="note">
+      This estimator uses the tier PM plan rates + fleet discounts and can also estimate inspection/PM service cadence.
+      Final pricing may vary based on scope, parts, repairs, and fleet specifics.
+    </p>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="pill">Step 1 — Vehicle Counts</div>
+        <a class="note" href="./" style="text-decoration:none;">← Back to downtime calculator</a>
+      </div>
+
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label for="t1">Tier 1 (Light Duty)</label>
+          <input id="t1" type="number" min="0" value="5" />
+        </div>
+        <div>
+          <label for="t2">Tier 2 (Medium Duty 2500 series)</label>
+          <input id="t2" type="number" min="0" value="3" />
+        </div>
+        <div>
+          <label for="t3">Tier 3 (Heavy Duty 350+)</label>
+          <input id="t3" type="number" min="0" value="2" />
+        </div>
+        <div>
+          <label for="t4">Tier 4 (Combo/IFTA &gt; 6 wheels)</label>
+          <input id="t4" type="number" min="0" value="0" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pill">Step 2 — How often?</div>
+
+      <div class="grid" style="margin-top:12px;">
+        <div>
+          <label for="pmPerYear">PM plan cadence (visits per vehicle per year)</label>
+          <input id="pmPerYear" type="number" min="0" step="1" value="4" />
+          <div class="note">Used for estimating optional “per-visit” service fees.</div>
+        </div>
+
+        <div>
+          <label for="inspPerYear">Vehicle inspections (per vehicle per year)</label>
+          <input id="inspPerYear" type="number" min="0" step="1" value="4" />
+        </div>
+
+        <div>
+          <label for="svcPmPerYear">PM / Oil Change services (per vehicle per year)</label>
+          <input id="svcPmPerYear" type="number" min="0" step="1" value="4" />
+          <div class="note">Uses Exhibit A “PM / Oil Change” per-service pricing for Tier 1–3.</div>
+        </div>
+
+        <div>
+          <label for="includeMobileFee">Include Mobile Service Fee ($150) per scheduled visit?</label>
+          <select id="includeMobileFee">
+            <option value="no">No</option>
+            <option value="yes" selected>Yes</option>
+          </select>
+          <div class="note">Assumes 1 scheduled visit per cadence “event”.</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="calcBtn">Calculate</button>
+        <button class="muted" id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pill">Estimated Costs</div>
+
+      <div style="margin-top:12px">
+        <div class="note">PM Plan (monthly)</div>
+        <div class="big" id="pmMonthly">$0 / month</div>
+        <div class="note" id="discountLine"></div>
+
+        <hr>
+
+        <div class="note">Optional Service-Cadence Estimate (annual)</div>
+        <div class="big" id="annualTotal">$0 / year</div>
+        <div class="note" id="annualBreakdown"></div>
+
+        <hr>
+
+        <div class="note" id="assumptions"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Base Monthly PM Rates (Tier 1-4)
+    // Tier 1: $145, Tier 2: $225, Tier 3: $395, Tier 4: $605
+    const pmMonthlyRates = { t1:145, t2:225, t3:395, t4:605 };
+
+    // Fleet size discounts (apply to PM labor only)
+    function discountPct(totalVehicles){
+      if (totalVehicles >= 100) return null;     // "Custom"
+      if (totalVehicles >= 50) return 0.10;
+      if (totalVehicles >= 30) return 0.075;
+      if (totalVehicles >= 15) return 0.05;
+      return 0.0; // 5–14 no discount
+    }
+
+    // Exhibit A per-service pricing (Tier 1–3)
+    const servicePrices = {
+      inspection: { t1:125, t2:150, t3:225 },
+      pmOil:      { t1:215, t2:295, t3:525 } // doc shows $525+ for Tier 3; using 525 as base
+    };
+
+    const mobileServiceFee = 150;
+
+    function money(n){
+      return new Intl.NumberFormat(undefined, { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+    }
+
+    function num(id){ return Number(document.getElementById(id).value || 0); }
+
+    function calc(){
+      const t1 = num('t1'), t2 = num('t2'), t3 = num('t3'), t4 = num('t4');
+      const totalVehicles = t1 + t2 + t3 + t4;
+
+      // --- PM PLAN (monthly) ---
+      const pmBaseMonthly =
+        (t1 * pmMonthlyRates.t1) +
+        (t2 * pmMonthlyRates.t2) +
+        (t3 * pmMonthlyRates.t3) +
+        (t4 * pmMonthlyRates.t4);
+
+      const pct = discountPct(totalVehicles);
+      let pmFinalMonthly = pmBaseMonthly;
+      let discountText = "";
+
+      if (pct === null){
+        discountText = `Fleet size: ${totalVehicles} vehicles → Discount: Custom (call for pricing).`;
+      } else {
+        const discountAmt = pmBaseMonthly * pct;
+        pmFinalMonthly = pmBaseMonthly - discountAmt;
+        discountText = `Fleet size: ${totalVehicles} vehicles → PM labor discount: ${(pct*100).toFixed(1)}% (saves ${money(discountAmt)}/month).`;
+      }
+
+      document.getElementById('pmMonthly').textContent = `${money(pmFinalMonthly)} / month`;
+      document.getElementById('discountLine').textContent = discountText;
+
+      // --- OPTIONAL SERVICE CADENCE (annual) ---
+      // Using Tier 1–3 service table for inspection + PM/Oil Change.
+      const inspPerYear = num('inspPerYear');
+      const svcPmPerYear = num('svcPmPerYear');
+
+      const inspAnnual =
+        (t1 * servicePrices.inspection.t1 + t2 * servicePrices.inspection.t2 + t3 * servicePrices.inspection.t3) * inspPerYear;
+
+      const pmServiceAnnual =
+        (t1 * servicePrices.pmOil.t1 + t2 * servicePrices.pmOil.t2 + t3 * servicePrices.pmOil.t3) * svcPmPerYear;
+
+      // Mobile Service Fee estimate:
+      // If enabled, assume each cadence "event" requires a scheduled visit.
+      const includeMobile = document.getElementById('includeMobileFee').value === 'yes';
+      const pmPerYear = num('pmPerYear');
+
+      // Assume one scheduled visit per PM cadence event across the fleet (simple, conservative).
+      // total visits/year ≈ pmPerYear (events) for the fleet overall.
+      // If you prefer per-vehicle visits, change to: totalVehicles * pmPerYear
+      const estimatedVisitsPerYear = pmPerYear;
+      const mobileAnnual = includeMobile ? (estimatedVisitsPerYear * mobileServiceFee) : 0;
+
+      const annualTotal = inspAnnual + pmServiceAnnual + mobileAnnual;
+
+      document.getElementById('annualTotal').textContent = `${money(annualTotal)} / year`;
+      document.getElementById('annualBreakdown').textContent =
+        `Inspections: ${money(inspAnnual)} • PM/Oil Change: ${money(pmServiceAnnual)}${includeMobile ? ` • Mobile fees: ${money(mobileAnnual)}` : ""}`;
+
+      document.getElementById('assumptions').textContent =
+        `Assumptions: Tier 3 PM/Oil Change uses $525 as a base (“$525+” in Exhibit A). Mobile Service Fee is $150 per scheduled visit when enabled. PM labor discount applies to PM plan labor only.`;
+    }
+
+    document.getElementById('calcBtn').addEventListener('click', calc);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('t1').value = 5;
+      document.getElementById('t2').value = 3;
+      document.getElementById('t3').value = 2;
+      document.getElementById('t4').value = 0;
+      document.getElementById('pmPerYear').value = 4;
+      document.getElementById('inspPerYear').value = 4;
+      document.getElementById('svcPmPerYear').value = 4;
+      document.getElementById('includeMobileFee').value = 'yes';
+      calc();
+    });
+
+    calc();
+  </script>
+</body>
+</html>
