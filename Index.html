@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FLS Downtime Loss Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    .primary { background: #111; color: #fff; }
+    .muted { background: #eee; }
+    .big { font-size: 22px; font-weight: 800; }
+    .note { color: #555; font-size: 14px; line-height: 1.4; }
+    @media (max-width: 700px){ .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Downtime / Productivity Loss Calculator</h1>
+    <p class="note">
+      Estimate how much production you lose when employees take vehicles to a shop during working hours.
+      FLS reduces this by servicing vehicles after hours at your place of business.
+    </p>
+
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label for="vehicles">Number of vehicles</label>
+          <input id="vehicles" type="number" min="0" value="10">
+        </div>
+        <div>
+          <label for="revPerDay">Revenue per vehicle per day ($)</label>
+          <input id="revPerDay" type="number" min="0" step="0.01" value="500">
+        </div>
+        <div>
+          <label for="tripsPerMonth">Shop trips per vehicle per month</label>
+          <input id="tripsPerMonth" type="number" min="0" step="0.1" value="1">
+        </div>
+        <div>
+          <label for="hoursLost">Hours lost per shop visit</label>
+          <input id="hoursLost" type="number" min="0" step="0.5" value="4">
+        </div>
+        <div>
+          <label for="workdayHours">Workday hours</label>
+          <input id="workdayHours" type="number" min="1" step="0.5" value="8">
+        </div>
+      </div>
+
+      <div style="margin-top:14px" class="row">
+        <button class="primary" id="calcBtn">Calculate</button>
+        <button class="muted" id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="note">Estimated lost productivity (revenue impact):</div>
+      <div class="big" id="monthly">$0 / month</div>
+      <div class="note" id="annual">$0 / year</div>
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;">
+      <div class="note" id="formula"></div>
+    </div>
+  </div>
+
+  <script>
+    function money(n){
+      return new Intl.NumberFormat(undefined, { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+    }
+
+    function calc(){
+      const N = Number(document.getElementById('vehicles').value || 0);
+      const R = Number(document.getElementById('revPerDay').value || 0);
+      const M = Number(document.getElementById('tripsPerMonth').value || 0);
+      const H = Number(document.getElementById('hoursLost').value || 0);
+      const D = Number(document.getElementById('workdayHours').value || 8);
+
+      const monthlyLoss = (D > 0) ? (N * M * (H / D) * R) : 0;
+      const annualLoss = monthlyLoss * 12;
+
+      document.getElementById('monthly').textContent = `${money(monthlyLoss)} / month`;
+      document.getElementById('annual').textContent = `${money(annualLoss)} / year`;
+      document.getElementById('formula').textContent =
+        `Formula: vehicles (${N}) × trips/month (${M}) × (hours lost ${H} ÷ workday hours ${D}) × revenue/day (${money(R)})`;
+    }
+
+    document.getElementById('calcBtn').addEventListener('click', calc);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('vehicles').value = 10;
+      document.getElementById('revPerDay').value = 500;
+      document.getElementById('tripsPerMonth').value = 1;
+      document.getElementById('hoursLost').value = 4;
+      document.getElementById('workdayHours').value = 8;
+      calc();
+    });
+
+    // auto-calc on load
+    calc();
+  </script>
+</body>
+</html>
