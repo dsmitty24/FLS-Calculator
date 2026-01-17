@@ -27,10 +27,13 @@
   <div class="wrap">
     <h1>Fleet Pricing Estimator</h1>
     <p class="note">
-      This estimator is for your PM program only: <b>oil change + inspection</b>.
-      Any additional maintenance identified during inspection is <b>not included</b> and would be quoted separately.
+      This estimator covers the FLS PM program only:
+      <b>oil change + inspection</b>.
+      Repairs or maintenance identified during inspection are
+      <b>not included</b> and are quoted separately.
     </p>
 
+    <!-- STEP 1 -->
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <div class="pill">Step 1 — Vehicle Counts</div>
@@ -51,30 +54,33 @@
           <input id="t3" type="number" min="0" value="2" />
         </div>
         <div>
-          <label for="t4">Tier 4 (Combo/IFTA &gt; 6 wheels)</label>
+          <label for="t4">Tier 4 (Combo / IFTA &gt; 6 wheels)</label>
           <input id="t4" type="number" min="0" value="0" />
         </div>
       </div>
     </div>
 
+    <!-- STEP 2 -->
     <div class="card">
-      <div class="pill">Step 2 — PM Visits</div>
+      <div class="pill">Step 2 — PM Service Volume</div>
 
       <div class="grid" style="margin-top:12px;">
         <div>
-          <label for="visitsPerYear">Oil Change/PM visits per vehicle per year</label>
-          <input id="visitsPerYear" type="number" min="0" step="1" value="4" />
-          <div class="note">Each PM visit includes the inspection. Repairs found during inspection are not included.</div>
+          <label for="pmPerYear">PM services per vehicle per year</label>
+          <input id="pmPerYear" type="number" min="0" step="1" value="4" />
+          <div class="note">
+            Each PM service includes an oil change and inspection.
+          </div>
         </div>
 
         <div>
-          <label for="includeMobileFee">Include Mobile Service Fee ($150) per scheduled visit?</label>
+          <label for="includeMobileFee">Include $150 mobile service fee per visit?</label>
           <select id="includeMobileFee">
             <option value="no">No</option>
             <option value="yes" selected>Yes</option>
           </select>
           <div class="note">
-            Assumption: 1 scheduled on-site visit per “cycle” (not per vehicle). Adjust if you want it per vehicle.
+            Assumes one scheduled on-site visit per PM cycle.
           </div>
         </div>
       </div>
@@ -85,17 +91,18 @@
       </div>
     </div>
 
+    <!-- RESULTS -->
     <div class="card">
       <div class="pill">Estimated Costs</div>
 
       <div style="margin-top:12px">
-        <div class="note">PM Plan (monthly)</div>
+        <div class="note">PM Plan Subscription (monthly)</div>
         <div class="big" id="pmMonthly">$0 / month</div>
         <div class="note" id="discountLine"></div>
 
         <hr>
 
-        <div class="note">PM Program Service Estimate (annual)</div>
+        <div class="note">PM Service Volume (annual)</div>
         <div class="big" id="annualTotal">$0 / year</div>
         <div class="note" id="annualBreakdown"></div>
 
@@ -107,60 +114,78 @@
   </div>
 
   <script>
-    // Base Monthly PM Plan Rates (Tier 1–4)
     const pmMonthlyRates = { t1:145, t2:225, t3:395, t4:605 };
+    const pmPerVisit = { t1:215, t2:295, t3:525 }; // Tier 3 = $525+
+    const mobileFee = 150;
 
-    // Fleet size discounts (apply to PM plan labor only)
-    function discountPct(totalVehicles){
-      if (totalVehicles >= 100) return null;     // "Custom"
-      if (totalVehicles >= 50) return 0.10;
-      if (totalVehicles >= 30) return 0.075;
-      if (totalVehicles >= 15) return 0.05;
-      return 0.0; // 5–14 no discount
+    function discountPct(total){
+      if (total >= 100) return null;
+      if (total >= 50) return 0.10;
+      if (total >= 30) return 0.075;
+      if (total >= 15) return 0.05;
+      return 0;
     }
-
-    // Per-visit PM/Oil Change pricing (Tier 1–3) used for the annual “visit-based” estimate.
-    // Note: Tier 4 per-service pricing isn't listed in the table, so the annual estimate uses Tier 1–3 only.
-    const pmOilPerVisit = { t1:215, t2:295, t3:525 }; // Tier 3 shown as $525+
-
-    const mobileServiceFee = 150;
 
     function money(n){
-      return new Intl.NumberFormat(undefined, { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+      return new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n);
     }
-
-    function num(id){ return Number(document.getElementById(id).value || 0); }
+    function n(id){ return Number(document.getElementById(id).value || 0); }
 
     function calc(){
-      const t1 = num('t1'), t2 = num('t2'), t3 = num('t3'), t4 = num('t4');
-      const totalVehicles = t1 + t2 + t3 + t4;
+      const t1=n('t1'), t2=n('t2'), t3=n('t3'), t4=n('t4');
+      const totalVehicles = t1+t2+t3+t4;
+      const pmPerYear = n('pmPerYear');
+      const includeMobile = document.getElementById('includeMobileFee').value==='yes';
 
-      // --- PM PLAN (monthly) ---
-      const pmBaseMonthly =
-        (t1 * pmMonthlyRates.t1) +
-        (t2 * pmMonthlyRates.t2) +
-        (t3 * pmMonthlyRates.t3) +
-        (t4 * pmMonthlyRates.t4);
+      // Monthly PM plan
+      const baseMonthly =
+        t1*pmMonthlyRates.t1 +
+        t2*pmMonthlyRates.t2 +
+        t3*pmMonthlyRates.t3 +
+        t4*pmMonthlyRates.t4;
 
       const pct = discountPct(totalVehicles);
-      let pmFinalMonthly = pmBaseMonthly;
-      let discountText = "";
+      let finalMonthly = baseMonthly;
+      let discountText = '';
 
       if (pct === null){
-        discountText = `Fleet size: ${totalVehicles} vehicles → Discount: Custom (call for pricing).`;
+        discountText = `Fleet size ${totalVehicles}: custom pricing required.`;
       } else {
-        const discountAmt = pmBaseMonthly * pct;
-        pmFinalMonthly = pmBaseMonthly - discountAmt;
-        discountText = `Fleet size: ${totalVehicles} vehicles → PM plan labor discount: ${(pct*100).toFixed(1)}% (saves ${money(discountAmt)}/month).`;
+        const savings = baseMonthly * pct;
+        finalMonthly -= savings;
+        discountText = pct>0
+          ? `Fleet discount ${(pct*100).toFixed(1)}% saves ${money(savings)} / month`
+          : `Fleet size ${totalVehicles}: no discount applied.`;
       }
 
-      document.getElementById('pmMonthly').textContent = `${money(pmFinalMonthly)} / month`;
+      document.getElementById('pmMonthly').textContent = `${money(finalMonthly)} / month`;
       document.getElementById('discountLine').textContent = discountText;
 
-      // --- ANNUAL VISIT-BASED ESTIMATE (PM visit = oil change + inspection) ---
-      const visitsPerYear = num('visitsPerYear');
-      const includeMobile = document.getElementById('includeMobileFee').value === 'yes';
+      // Annual PM service volume
+      const annualPm =
+        (t1*pmPerVisit.t1 + t2*pmPerVisit.t2 + t3*pmPerVisit.t3) * pmPerYear;
 
-      // Annual PM estimate for Tier 1–3:
-      const annualPmVisits =
-        (t1 * pmOilPerVisit.t1 + t2*
+      const annualMobile = includeMobile ? pmPerYear * mobileFee : 0;
+      const annualTotal = annualPm + annualMobile;
+
+      document.getElementById('annualTotal').textContent = `${money(annualTotal)} / year`;
+      document.getElementById('annualBreakdown').textContent =
+        `PM services/year: ${pmPerYear} per vehicle`
+        + (includeMobile ? ` • Mobile service fees: ${money(annualMobile)}` : ``);
+
+      document.getElementById('assumptions').textContent =
+        `PM service includes oil change + inspection only. Repairs identified during inspection are excluded and quoted separately. Tier 3 per-visit pricing uses $525 as a base (“$525+”).`;
+    }
+
+    document.getElementById('calcBtn').onclick = calc;
+    document.getElementById('resetBtn').onclick = () => {
+      ['t1','t2','t3','t4'].forEach((id,i)=>document.getElementById(id).value=[5,3,2,0][i]);
+      document.getElementById('pmPerYear').value=4;
+      document.getElementById('includeMobileFee').value='yes';
+      calc();
+    };
+
+    calc();
+  </script>
+</body>
+</html>
