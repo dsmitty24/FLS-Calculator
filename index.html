@@ -16,6 +16,7 @@
     .primary { background: #111; color: #fff; }
     .muted { background: #eee; }
     .big { font-size: 22px; font-weight: 800; }
+    .value { font-size: 18px; font-weight: 700; color: #0a0a0a; margin-top: 10px; }
     .note { color: #555; font-size: 14px; line-height: 1.4; }
     details { margin-top: 10px; }
     @media (max-width: 700px){ .grid { grid-template-columns: 1fr; } }
@@ -26,7 +27,7 @@
     <h1>Downtime / Productivity Loss Calculator</h1>
     <p class="note">
       Estimate how much production you lose when vehicles are taken to a shop during working hours.
-      FLS reduces this by servicing vehicles after hours at your place of business.
+      FLS reduces this loss by performing maintenance after hours at your place of business.
     </p>
 
     <div class="card">
@@ -37,4 +38,87 @@
         </div>
         <div>
           <label for="revPerDay">Revenue each vehicle generates per day ($)</label>
-          <input id="revPerDay" type="number" min="0" step="0.01" value="500
+          <input id="revPerDay" type="number" min="0" step="0.01" value="500">
+        </div>
+        <div>
+          <label for="visitsPerYear">Maintenance visits per vehicle per year</label>
+          <input id="visitsPerYear" type="number" min="0" step="0.1" value="6">
+        </div>
+      </div>
+
+      <details>
+        <summary class="note"><b>Advanced assumptions</b> (optional)</summary>
+        <div class="grid" style="margin-top:12px">
+          <div>
+            <label for="hoursLost">Hours lost per shop visit</label>
+            <input id="hoursLost" type="number" min="0" step="0.5" value="4">
+          </div>
+          <div>
+            <label for="workdayHours">Workday hours</label>
+            <input id="workdayHours" type="number" min="1" step="0.5" value="8">
+          </div>
+        </div>
+      </details>
+
+      <div style="margin-top:14px" class="row">
+        <button class="primary" id="calcBtn">Calculate</button>
+        <button class="muted" id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="note">Estimated lost productivity (revenue impact):</div>
+      <div class="big" id="annual">$0 / year</div>
+      <div class="note" id="monthly">$0 / month (average)</div>
+
+      <div class="value" id="valueAdd"></div>
+
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;">
+      <div class="note" id="formula"></div>
+    </div>
+  </div>
+
+  <script>
+    function money(n){
+      return new Intl.NumberFormat(undefined, {
+        style:'currency', currency:'USD', maximumFractionDigits:0
+      }).format(n);
+    }
+
+    function calc(){
+      const N = Number(document.getElementById('vehicles').value || 0);
+      const R = Number(document.getElementById('revPerDay').value || 0);
+      const V = Number(document.getElementById('visitsPerYear').value || 0);
+
+      const H = Number(document.getElementById('hoursLost')?.value || 4);
+      const D = Number(document.getElementById('workdayHours')?.value || 8);
+
+      const annualLoss = (D > 0) ? (N * V * (H / D) * R) : 0;
+      const monthlyAvg = annualLoss / 12;
+
+      document.getElementById('annual').textContent = `${money(annualLoss)} / year`;
+      document.getElementById('monthly').textContent = `${money(monthlyAvg)} / month (average)`;
+
+      document.getElementById('valueAdd').textContent =
+        `By using after-hours, on-site fleet maintenance, you could avoid approximately ${money(annualLoss)} per year in lost production.`;
+
+      document.getElementById('formula').textContent =
+        `Formula: vehicles (${N}) × visits/year (${V}) × (hours lost ${H} ÷ workday hours ${D}) × revenue/day (${money(R)})`;
+    }
+
+    document.getElementById('calcBtn').addEventListener('click', calc);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('vehicles').value = 10;
+      document.getElementById('revPerDay').value = 500;
+      document.getElementById('visitsPerYear').value = 6;
+      const h = document.getElementById('hoursLost');
+      const d = document.getElementById('workdayHours');
+      if (h) h.value = 4;
+      if (d) d.value = 8;
+      calc();
+    });
+
+    calc();
+  </script>
+</body>
+</html>
