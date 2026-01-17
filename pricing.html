@@ -19,6 +19,7 @@
     .big { font-size: 22px; font-weight: 800; }
     .note { color: #555; font-size: 14px; line-height: 1.4; }
     .pill { display:inline-block; padding:4px 10px; border:1px solid #ddd; border-radius:999px; font-size:12px; color:#444; }
+    .error { color:#b00020; font-weight:700; margin-top:10px; }
     hr { border:none; border-top:1px solid #eee; margin:14px 0; }
     @media (max-width: 800px){ .grid, .grid3 { grid-template-columns: 1fr; } }
   </style>
@@ -28,7 +29,7 @@
     <h1>Preventative Maintenance Program Calculator</h1>
     <p class="note">
       This calculator estimates the cost of the FLS <b>Preventative Maintenance (PM) Program</b>, which includes scheduled
-      <b>oil changes and inspections</b> performed on-site.
+      <b>oil changes and inspections</b> performed on-site after hours.
       Any additional maintenance identified during inspection is <b>not included</b> and would be quoted separately.
     </p>
 
@@ -81,9 +82,11 @@
       </div>
 
       <div class="row" style="margin-top:14px">
-        <button class="primary" id="calcBtn">Calculate</button>
-        <button class="muted" id="resetBtn">Reset</button>
+        <button type="button" class="primary" id="calcBtn">Calculate</button>
+        <button type="button" class="muted" id="resetBtn">Reset</button>
       </div>
+
+      <div id="err" class="error" style="display:none;"></div>
     </div>
 
     <!-- RESULTS -->
@@ -93,3 +96,145 @@
       <div style="margin-top:12px">
         <div class="note">Preventative Maintenance Program (monthly subscription)</div>
         <div class="big" id="pmMonthly">$0 / month</div>
+        <div class="note" id="discountLine"></div>
+
+        <hr>
+
+        <div class="note">Estimated PM service workload and fees (annual)</div>
+        <div class="big" id="annualTotal">$0 / year</div>
+        <div class="note" id="annualBreakdown"></div>
+
+        <hr>
+
+        <div class="note" id="assumptions"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Pricing logic (matches your calculator design) ---
+    const pmMonthlyRates = { t1:145, t2:225, t3:395, t4:605 };
+    const pmPerVisit = { t1:215, t2:295, t3:525 }; // Tier 3 = $525+ (base)
+    const mobileFee = 150;
+
+    function discountPct(total){
+      if (total >= 100) return null;   // Custom pricing
+      if (total >= 50) return 0.10;
+      if (total >= 30) return 0.075;
+      if (total >= 15) return 0.05;
+      return 0;
+    }
+
+    function money(n){
+      return new Intl.NumberFormat(undefined, { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+    }
+
+    function getNum(id){
+      const el = document.getElementById(id);
+      return el ? Number(el.value || 0) : 0;
+    }
+
+    function setText(id, text){
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function showError(msg){
+      const e = document.getElementById('err');
+      if (!e) return;
+      if (!msg){
+        e.style.display = 'none';
+        e.textContent = '';
+        return;
+      }
+      e.style.display = 'block';
+      e.textContent = msg;
+    }
+
+    function calc(){
+      try {
+        showError('');
+
+        const t1 = getNum('t1'), t2 = getNum('t2'), t3 = getNum('t3'), t4 = getNum('t4');
+        const totalVehicles = t1 + t2 + t3 + t4;
+
+        const pmPerYear = getNum('pmPerYear');
+        const includeMobile = (document.getElementById('includeMobileFee')?.value === 'yes');
+
+        // Monthly subscription
+        const baseMonthly =
+          (t1 * pmMonthlyRates.t1) +
+          (t2 * pmMonthlyRates.t2) +
+          (t3 * pmMonthlyRates.t3) +
+          (t4 * pmMonthlyRates.t4);
+
+        const pct = discountPct(totalVehicles);
+        let finalMonthly = baseMonthly;
+        let discountText = '';
+
+        if (pct === null){
+          discountText = `Fleet size ${totalVehicles}: custom pricing required (100+ vehicles).`;
+        } else {
+          const savings = baseMonthly * pct;
+          finalMonthly = baseMonthly - savings;
+          discountText = pct > 0
+            ? `Fleet discount ${(pct * 100).toFixed(1)}% saves ${money(savings)} / month.`
+            : `Fleet size ${totalVehicles}: no discount applied.`;
+        }
+
+        setText('pmMonthly', `${money(finalMonthly)} / month`);
+        setText('discountLine', discountText);
+
+        // Annual workload + fees
+        const annualPmServicesCount = totalVehicles * pmPerYear;
+
+        const annualPmServiceCost =
+          ((t1 * pmPerVisit.t1) + (t2 * pmPerVisit.t2) + (t3 * pmPerVisit.t3)) * pmPerYear;
+
+        // Per your assumption: one scheduled visit per cycle (not per vehicle)
+        const scheduledVisitsPerYear = pmPerYear;
+        const annualMobileFees = includeMobile ? (scheduledVisitsPerYear * mobileFee) : 0;
+
+        const annualTotal = annualPmServiceCost + annualMobileFees;
+
+        setText('annualTotal', `${money(annualTotal)} / year`);
+        setText(
+          'annualBreakdown',
+          `Estimated PM services/year: ${annualPmServicesCount} (fleet total) • Base PM service estimate: ${money(annualPmServiceCost)}`
+          + (includeMobile ? ` • Mobile service fees: ${money(annualMobileFees)}` : ``)
+        );
+
+        setText(
+          'assumptions',
+          `Notes: PM service includes oil change + inspection only. Additional maintenance identified during inspection is quoted separately. Tier 3 per-visit pricing uses $525 as a base (“$525+”). Annual per-visit estimate uses Tier 1–3 only; Tier 4 per-visit pricing isn’t listed in the per-service table.`
+        );
+
+      } catch (err) {
+        showError('Something on the page doesn’t match the calculator code yet. Please refresh and try again. (Tech detail: ' + err.message + ')');
+      }
+    }
+
+    function reset(){
+      document.getElementById('t1').value = 5;
+      document.getElementById('t2').value = 3;
+      document.getElementById('t3').value = 2;
+      document.getElementById('t4').value = 0;
+      document.getElementById('pmPerYear').value = 4;
+      document.getElementById('includeMobileFee').value = 'yes';
+      calc();
+    }
+
+    // Attach handlers after page is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const calcBtn = document.getElementById('calcBtn');
+      const resetBtn = document.getElementById('resetBtn');
+
+      if (calcBtn) calcBtn.addEventListener('click', calc);
+      if (resetBtn) resetBtn.addEventListener('click', reset);
+
+      // Auto-calc on load
+      calc();
+    });
+  </script>
+</body>
+</html>
