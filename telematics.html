@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fleet Telematics Install Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: block; font-weight: 700; margin-bottom: 6px; }
+    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    .primary { background:#111; color:#fff; }
+    .muted { background:#eee; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top: 12px; }
+    .big { font-size: 22px; font-weight: 900; }
+    .note { color:#555; font-size: 14px; line-height: 1.4; }
+    .pill { display:inline-block; padding:4px 10px; border:1px solid #ddd; border-radius:999px; font-size:12px; color:#444; }
+    hr { border:none; border-top:1px solid #eee; margin:14px 0; }
+    @media (max-width: 700px){ .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Fleet Telematics Install Calculator</h1>
+    <p class="note">
+      Pricing: <b>$120 per vehicle</b> for a gateway install (includes the first camera/device). Each additional camera/device is <b>$50 per vehicle</b>.
+    </p>
+
+    <div class="card">
+      <div class="pill">Inputs</div>
+
+      <div class="grid" style="margin-top:12px;">
+        <div>
+          <label for="vehicles">Number of vehicles</label>
+          <input id="vehicles" type="number" min="0" value="10" />
+        </div>
+
+        <div>
+          <label for="devices">Total devices per vehicle (gateway + cameras/devices)</label>
+          <input id="devices" type="number" min="1" value="2" />
+          <div class="note">Examples: Gateway+1 camera = 2 devices. Gateway+2 cameras = 3 devices.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <button type="button" class="primary" id="calcBtn">Calculate</button>
+        <button type="button" class="muted" id="resetBtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pill">Results</div>
+
+      <div class="note" style="margin-top:12px;">Estimated install cost:</div>
+      <div class="big" id="total">$0</div>
+
+      <hr>
+
+      <div class="note" id="breakdown"></div>
+      <div class="note" id="formula"></div>
+    </div>
+  </div>
+
+  <script>
+    const BASE_PER_VEHICLE = 120;      // Gateway + first device included
+    const ADDL_DEVICE = 50;            // Each additional device per vehicle
+
+    function money(n){
+      return new Intl.NumberFormat(undefined, {
+        style:'currency', currency:'USD', maximumFractionDigits:0
+      }).format(n);
+    }
+
+    function getNum(id){
+      const el = document.getElementById(id);
+      return el ? Number(el.value || 0) : 0;
+    }
+
+    function calc(){
+      const vehicles = getNum('vehicles');
+      let devices = getNum('devices');
+
+      // enforce minimum 1 device per vehicle
+      if (devices < 1) devices = 1;
+
+      // additional devices beyond the first included device
+      const additionalDevices = Math.max(0, devices - 2); 
+      // Explanation: total devices includes gateway + cameras/devices.
+      // Your pricing examples imply: gateway + 1 camera = $120 (no add-ons),
+      // so "included set" is gateway + 1 device = 2 total devices.
+
+      const perVehicleCost = BASE_PER_VEHICLE + (additionalDevices * ADDL_DEVICE);
+      const total = vehicles * perVehicleCost;
+
+      document.getElementById('total').textContent = money(total);
+
+      document.getElementById('breakdown').textContent =
+        `Per vehicle: ${money(BASE_PER_VEHICLE)} (gateway + first camera/device) + ` +
+        `${additionalDevices} additional device(s) × ${money(ADDL_DEVICE)} = ${money(perVehicleCost)} per vehicle.`;
+
+      document.getElementById('formula').textContent =
+        `Formula: vehicles (${vehicles}) × per-vehicle cost (${money(perVehicleCost)}) = ${money(total)}.`;
+    }
+
+    function reset(){
+      document.getElementById('vehicles').value = 10;
+      document.getElementById('devices').value = 2; // gateway + 1 camera
+      calc();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('calcBtn').addEventListener('click', calc);
+      document.getElementById('resetBtn').addEventListener('click', reset);
+      calc();
+    });
+  </script>
+</body>
+</html>
